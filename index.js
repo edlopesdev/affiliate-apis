@@ -1,4 +1,6 @@
+require('dotenv').config();
 const express = require('express');
+const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -13,7 +15,32 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Amazon API endpoints
+// ClickBank API - Real Integration
+app.get('/clickbank/random-product', async (req, res) => {
+  try {
+    const response = await axios.get('https://api.clickbank.com/rest/1.3/products', {
+      headers: {
+        'Authorization': `Bearer ${process.env.CLICKBANK_API_KEY}`
+      }
+    });
+    
+    const products = response.data.data;
+    const randomProduct = products[Math.floor(Math.random() * products.length)];
+    
+    res.json({
+      success: true,
+      product: randomProduct,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Amazon Products - Mock data (sem token)
 const amazonProducts = [
   {
     id: 1,
@@ -58,43 +85,38 @@ app.get('/amazon/products', (req, res) => {
   });
 });
 
-// ClickBank API endpoints
-const clickbankProducts = [
-  {
-    id: 1,
-    title: "Digital Marketing Course",
-    price: "$97.00",
-    affiliate_link: "https://clickbank.com/xxxxx",
-    commission: "50%"
-  },
-  {
-    id: 2,
-    title: "Weight Loss Program",
-    price: "$47.00",
-    affiliate_link: "https://clickbank.com/yyyyy",
-    commission: "75%"
-  }
-];
-
-app.get('/clickbank/random-product', (req, res) => {
-  const randomProduct = clickbankProducts[Math.floor(Math.random() * clickbankProducts.length)];
-  res.json({
-    success: true,
-    product: randomProduct,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Video Generate API
+// Video Generate API - OpenAI Integration
 app.post('/video-generate', async (req, res) => {
   try {
     const { product, template } = req.body;
+    
+    // Use OpenAI to generate video script
+    const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a video script writer for product marketing.'
+        },
+        {
+          role: 'user',
+          content: `Create a 30-second video script for this product: ${JSON.stringify(product)}`
+        }
+      ]
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
     res.json({
       success: true,
-      message: "Video generation simulated",
-      video_id: "sim_" + Date.now(),
-      status: 'processing',
-      estimated_time: '60s'
+      message: "Video script generated",
+      script: openaiResponse.data.choices[0].message.content,
+      video_id: "vid_" + Date.now(),
+      status: 'ready',
+      estimated_time: '0s'
     });
   } catch (error) {
     res.status(500).json({
@@ -104,14 +126,95 @@ app.post('/video-generate', async (req, res) => {
   }
 });
 
-// Notify API
+// Notify API - Telegram Integration
 app.post('/notify', async (req, res) => {
   try {
-    const { type, message, data } = req.body;
-    console.log(`Notification [${type}]: ${message}`, data);
+    const { message, data } = req.body;
+    
+    const telegramMessage = `🔔 *Notificação*\n\n${message}\n\n\`\`\`\n${JSON.stringify(data, null, 2)}\n\`\`\``;
+    
+    await axios.post(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        chat_id: process.env.TELEGRAM_CHAT_ID,
+        text: telegramMessage,
+        parse_mode: 'Markdown'
+      }
+    );
+    
     res.json({
       success: true,
-      message: 'Notificação enviada com sucesso'
+      message: 'Notificação enviada com sucesso via Telegram'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Social Media Integration - Twitter
+app.post('/social/twitter/post', async (req, res) => {
+  try {
+    const { text, product } = req.body;
+    
+    // Simulated Twitter post (requires OAuth 1.0a)
+    res.json({
+      success: true,
+      message: 'Twitter post simulado (requer configuração OAuth)',
+      post: {
+        text: text || `Confira este produto: ${product.title}`,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Social Media Integration - Pinterest
+app.post('/social/pinterest/pin', async (req, res) => {
+  try {
+    const { image_url, description, link } = req.body;
+    
+    // Simulated Pinterest pin
+    res.json({
+      success: true,
+      message: 'Pinterest pin simulado',
+      pin: {
+        image_url,
+        description,
+        link,
+        board_id: process.env.PINTEREST_BOARD_ID,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Social Media Integration - TikTok
+app.post('/social/tiktok/post', async (req, res) => {
+  try {
+    const { video_url, caption } = req.body;
+    
+    // Simulated TikTok post
+    res.json({
+      success: true,
+      message: 'TikTok post simulado',
+      post: {
+        video_url,
+        caption,
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -130,4 +233,7 @@ app.listen(PORT, () => {
   console.log(`   - GET  /clickbank/random-product`);
   console.log(`   - POST /video-generate`);
   console.log(`   - POST /notify`);
+  console.log(`   - POST /social/twitter/post`);
+  console.log(`   - POST /social/pinterest/pin`);
+  console.log(`   - POST /social/tiktok/post`);
 });
